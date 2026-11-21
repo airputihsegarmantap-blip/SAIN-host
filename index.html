@@ -791,14 +791,6 @@ footer .note { margin-top: 22px; font-size: 12px; }
   function hash(str) { var h = 2166136261; str = String(str); for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h; }
   var toastTimer;
   function toast(msg) { $("toastText").textContent = msg; $("toast").classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { $("toast").classList.remove("show"); }, 2600); }
-  function api(path, body) {
-    var opt = { method: "POST", headers: { "Accept": "application/json" } };
-    if (body instanceof FormData) opt.body = body; else { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
-    return fetch(path, opt).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || "Server sedang bermasalah, coba lagi."); return j; });
-    }, function () { throw new Error("Tidak terhubung ke server. Periksa koneksi internet."); });
-  }
-  function busy(btn, on) { if (!btn) return; btn.disabled = on; btn.setAttribute("aria-busy", on ? "true" : "false"); }
   function successBox(el, html) { el.innerHTML = html; el.classList.add("show"); }
   function hexToRgb(h) { h = h.replace("#", ""); var n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
   function rgbToHex(r, g, b) { return "#" + [r, g, b].map(function (v) { return Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0"); }).join(""); }
@@ -1060,7 +1052,7 @@ footer .note { margin-top: 22px; font-size: 12px; }
   }
   var waRule = function (v) { return /^(08|628|\+628)\d{8,12}$/.test(v.replace(/[\s-]/g, "")) || "Nomor WhatsApp diawali 08 atau +62, 10–14 digit."; };
   function waPreview(to, text) { return '<div class="wa-thread"><div class="bubble">' + esc(text) + '<span class="time">' + new Date().toTimeString().slice(0, 5) + ' ✓✓</span></div></div><span class="small muted">Pesan dikirim Admin SAIN ke WhatsApp ' + esc(to) + '.</span>'; }
-  function pay(srv) {
+  function pay() {
     var bad = fieldCheck({
       bNama: function (v) { return v.length >= 3 || "Isi nama lengkap penerima."; }, bWa: waRule,
       bEmail: function (v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v) || "Format email belum benar."; },
@@ -1070,18 +1062,8 @@ footer .note { margin-top: 22px; font-size: 12px; }
     });
     if (bad) { bad.focus(); toast("Lengkapi data penerima dulu"); return; }
     var v = function (k) { return $(k).value.trim(); };
-    if (!srv || !srv.order) {
-      if (!cart.length) { toast("Keranjang masih kosong"); return; }
-      busy($("payBtn"), true);
-      api("/api/orders", {
-        buyer: { nama: v("bNama"), wa: v("bWa"), email: v("bEmail"), alamat: v("bAlamat"), kota: v("bKota"), prov: v("bProv"), pos: v("bPos") },
-        payment: $("paySel").value, courier: state.courier,
-        items: cart.map(function (c) { var p = find(c.id); return { id: c.id, name: p.name, kind: p.kind, qty: c.qty, size: c.size || null, price: p.price, cfg: p.cfg || null, edition: p.kind === "custom" ? null : edition(p) }; })
-      }).then(function (res) { busy($("payBtn"), false); pay(res); }, function (er) { busy($("payBtn"), false); toast(er.message); });
-      return;
-    }
     var cour = currentCourier(), sub = subtotal(), now = dueNow(), total = now + cour.price, r4 = function () { return String(Math.floor(1000 + Math.random() * 8999)); };
-    var order = srv.order, resi = srv.resi; total = srv.total;
+    var order = "SAIN-" + r4(), resi = cour.id === "ambil" ? "AMBIL-" + r4() : cour.prefix + r4() + r4() + r4();
     var hasCustom = cart.some(function (c) { return find(c.id).kind === "custom"; });
     var items = cart.map(function (c) { var p = find(c.id); return "• " + c.qty + "× " + p.name + (c.size ? " (" + c.size + ")" : "") + " – " + (p.kind === "custom" ? p.cfg.title : edition(p)); }).join("\n");
     var name = v("bNama").split(" ")[0];
@@ -1089,7 +1071,7 @@ footer .note { margin-top: 22px; font-size: 12px; }
     var waText = "Assalamu'alaikum " + name + ", terima kasih sudah belanja di SAIN.\n\nPesanan " + order + " sudah dibayar (" + rp(total) + ").\n" + items + "\n\n" + (cour.id === "ambil" ? "Kode ambil: " : "No. resi " + cour.name + ": ") + resi + "\n" + eta + "\n\nSedekah 7% dari pesananmu: " + rp(sub * SEDEKAH) + " untuk Sambungan Kebaikan.\nRekam video unboxing ya. Retur cacat tersembunyi paling lambat 3×24 jam.";
     var done = $("orderDone");
     done.innerHTML =
-      '<div class="head"><b class="ok">Pesanan berhasil dibuat</b><span>Pesanan <b class="num">' + order + '</b> · ' + rp(total) + ' via ' + esc($("paySel").value) + '</span><span class="small muted">Invoice dan resi dikirim ke WhatsApp <b>' + esc(v("bWa")) + '</b> dan email <b>' + esc(v("bEmail")) + '</b>.</span></div>' +
+      '<div class="head"><b class="ok">Pembayaran berhasil</b><span>Pesanan <b class="num">' + order + '</b> · ' + rp(total) + ' via ' + esc($("paySel").value) + '</span><span class="small muted">Invoice dan resi dikirim ke WhatsApp <b>' + esc(v("bWa")) + '</b> dan email <b>' + esc(v("bEmail")) + '</b>.</span></div>' +
       '<div class="msg-preview"><div class="ch"><i style="background:#25a35a">WA</i>Pesan WhatsApp ke ' + esc(v("bWa")) + '</div>' + waPreview(v("bWa"), waText) + '</div>' +
       '<div class="msg-preview"><div class="ch"><i style="background:#17432a">@</i>Email ke ' + esc(v("bEmail")) + '</div><div class="mail"><div class="mh"><b>Invoice ' + order + '</b><span class="small muted">Dari: SAIN &lt;pesanan@sain.id&gt;</span></div>' +
         '<div class="mb"><span>Halo ' + esc(name) + ', pesananmu sudah kami terima. ' + esc(eta) + '</span><span><b>Dikirim ke:</b><br>' + esc(v("bNama")) + '<br>' + esc(v("bAlamat")) + '<br>' + esc(v("bKota")) + ', ' + esc(v("bProv")) + ' ' + esc(v("bPos")) + '</span>' +
@@ -1225,13 +1207,7 @@ footer .note { margin-top: 22px; font-size: 12px; }
     $("sError").textContent = "";
     var opsi = document.querySelector('input[name="sOpsi"]:checked').value, n = $("sJumlah").value, jenis = $("sJenis").value;
     var msg = { jual: "Barang dijual setelah dikurasi. Kamu mendapat notifikasi saat laku.", poin: "Poin dihitung setelah kurasi selesai.", sedekah: "Terima kasih. Bukti penyaluran dikirim atas namamu." }[opsi];
-    var fd = new FormData(), btn = e.submitter || this.querySelector("[type=submit]");
-    fd.append("jenis", jenis); fd.append("jumlah", n); fd.append("opsi", opsi); fd.append("akad", "1");
-    Array.prototype.forEach.call($("sFoto").files || [], function (f) { fd.append("foto", f); });
-    busy(btn, true);
-    api("/api/setoran", fd).then(function (res) { busy(btn, false);
-    successBox($("sSuccess"), '<b class="ok">Setoran tercatat.</b><span>' + esc(n) + ' ' + esc(jenis.toLowerCase()) + '. ' + msg + '</span><span class="small muted">Nomor setoran <b class="num">' + esc(res.id) + '</b>. Antar ke SAIN atau jadwalkan penjemputan lewat WhatsApp.</span>');
-    }, function (er) { busy(btn, false); $("sError").textContent = er.message; });
+    successBox($("sSuccess"), '<b class="ok">Setoran tercatat.</b><span>' + esc(n) + ' ' + esc(jenis.toLowerCase()) + '. ' + msg + '</span><span class="small muted">Antar ke SAIN atau jadwalkan penjemputan lewat WhatsApp.</span>');
   });
 
   $("cProduk").innerHTML = TYPE_ORDER.map(function (x) { return '<option value="' + x + '">' + TYPES[x].label + '</option>'; }).join("");
@@ -1242,11 +1218,7 @@ footer .note { margin-top: 22px; font-size: 12px; }
     if (!nama) { $("cError").textContent = "Isi nama lembaga atau komunitas."; return; }
     if (qty < 12) { $("cError").textContent = "Pesanan komunitas mulai 12 pcs."; return; }
     $("cError").textContent = "";
-    var btn = e.submitter || this.querySelector("[type=submit]"); busy(btn, true);
-    api("/api/komunitas", { nama: nama, produk: $("cProduk").value, qty: qty, tanggal: $("cDate").value, catatan: $("cNote").value.trim() }).then(function (res) {
-      busy(btn, false);
-      successBox($("cSuccess"), '<b class="ok">Permintaan terkirim.</b><span>Nomor permintaan <b class="num">' + esc(res.id) + '</b>. Penawaran dan sampel untuk ' + esc(nama) + ' (' + qty + ' pcs) dikirim lewat WhatsApp paling lambat 2 hari kerja.</span>');
-    }, function (er) { busy(btn, false); $("cError").textContent = er.message; });
+    successBox($("cSuccess"), '<b class="ok">Permintaan terkirim.</b><span>Penawaran dan sampel untuk ' + esc(nama) + ' (' + qty + ' pcs) dikirim lewat WhatsApp paling lambat 2 hari kerja.</span>');
   });
 
   $("mForm").addEventListener("submit", function (e) {
@@ -1259,11 +1231,7 @@ footer .note { margin-top: 22px; font-size: 12px; }
     var text = jenis === "konveksi"
       ? "Assalamu'alaikum, terima kasih " + nm + " sudah mendaftar sebagai konveksi pemasok perca SAIN.\n\nLangkah berikutnya: tim kami mengecek contoh perca (jenis bahan, kebersihan, dan luntur warna). Mohon balas pesan ini dengan jadwal kunjungan yang memungkinkan."
       : "Assalamu'alaikum, terima kasih " + nm + " sudah mendaftar sebagai penjahit lepas SAIN.\n\nLangkah berikutnya: uji jahit dengan template perca SAIN. Mohon balas pesan ini dengan hari yang Anda bisa.";
-    var btn = e.submitter || this.querySelector("[type=submit]"); busy(btn, true);
-    api("/api/mitra", { jenis: jenis, nama: nm, wa: $("mWa").value.trim(), kota: $("mKota").value.trim(), setuju: true }).then(function () {
-      busy(btn, false);
-      successBox($("mOk"), '<b class="ok">Data terkirim</b>' + waPreview($("mWa").value.trim(), text));
-    }, function (er) { busy(btn, false); $("mErr").textContent = er.message; });
+    successBox($("mOk"), '<b class="ok">Data terkirim</b>' + waPreview($("mWa").value.trim(), text));
   });
 
   /* ===== PWA: service worker dan tombol pasang ===== */
